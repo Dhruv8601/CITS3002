@@ -18,6 +18,7 @@
 import socket
 import sys
 import tiles
+import threading
 
 
 def client_handler(connection, address):
@@ -115,5 +116,7 @@ sock.listen(5)
 while True:
   # handle each new connection independently
   connection, client_address = sock.accept()
+  thread = threading.Thread(target=client_handler, args=(connection, client_address))
+  thread.start()
   print('received connection from {}'.format(client_address))
-  client_handler(connection, client_address)
+  #client_handler(connection, client_address)
