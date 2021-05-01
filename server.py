@@ -20,13 +20,17 @@ import sys
 import tiles
 import threading
 
+players = {}
+board = tiles.Board()
 
-def client_handler(connection, address):
+
+def client_handler(connection, address, idCount):
   host, port = address
   name = '{}:{}'.format(host, port)
 
-  idnum = 0
-  live_idnums = [idnum]
+  idnum = idCount
+  live_idnums = [key for key in players]
+  print(live_idnums)
 
   connection.send(tiles.MessageWelcome(idnum).pack())
   connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
@@ -38,7 +42,7 @@ def client_handler(connection, address):
   
   connection.send(tiles.MessagePlayerTurn(idnum).pack())
   
-  board = tiles.Board()
+
 
   buffer = bytearray()
 
@@ -113,10 +117,16 @@ print('listening on {}'.format(sock.getsockname()))
 
 sock.listen(5)
 
+idCount = 0
 while True:
   # handle each new connection independently
   connection, client_address = sock.accept()
-  thread = threading.Thread(target=client_handler, args=(connection, client_address))
+  
+  players[idCount] = (connection, client_address)
+
+  thread = threading.Thread(target=client_handler, args=(connection, client_address, idCount))
   thread.start()
+  
+  idCount += 1
   print('received connection from {}'.format(client_address))
   #client_handler(connection, client_address)
