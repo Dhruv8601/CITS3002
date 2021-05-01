@@ -70,17 +70,23 @@ def client_handler(connection, address, idCount):
           for player in players:
             new_msg = msg
             new_msg.idnum = player
-            players[player][0].send(new_msg.pack())
+            new_connection = players[player][0]
+            new_connection.send(new_msg.pack())
 
           # check for token movement
           positionupdates, eliminated = board.do_player_movement(live_idnums)
-
-          for msg in positionupdates:
-            connection.send(msg.pack())
           
-          if idnum in eliminated:
-            connection.send(tiles.MessagePlayerEliminated(idnum).pack())
-            return
+
+          for pos_msg in positionupdates:
+            new_connection = players[pos_msg.idnum][0]
+            new_connection.send(pos_msg.pack())
+          
+          if eliminated:
+            for el_id in eliminated:
+              new_connection = players[el_id][0]
+              new_connection.send(tiles.MessagePlayerEliminated(el_id).pack())
+              del players[el_id]
+              return
 
           # pickup a new tile
           tileid = tiles.get_random_tileid()
