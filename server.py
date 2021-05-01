@@ -23,14 +23,13 @@ import threading
 players = {}
 board = tiles.Board()
 
-
 def client_handler(connection, address, idCount):
   host, port = address
   name = '{}:{}'.format(host, port)
 
   idnum = idCount
   live_idnums = [key for key in players]
-  print(live_idnums)
+  print(f"live nums: {live_idnums}")
 
   connection.send(tiles.MessageWelcome(idnum).pack())
   connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
@@ -68,7 +67,10 @@ def client_handler(connection, address, idCount):
       if isinstance(msg, tiles.MessagePlaceTile):
         if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
           # notify client that placement was successful
-          connection.send(msg.pack())
+          for player in players:
+            new_msg = msg
+            new_msg.idnum = player
+            players[player][0].send(new_msg.pack())
 
           # check for token movement
           positionupdates, eliminated = board.do_player_movement(live_idnums)
