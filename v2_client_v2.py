@@ -189,6 +189,7 @@ class Application(Frame):
       self.board.draw_tokens(self.canvas, self.boardoffset, self.playernums, self.eliminatedlist)
   
   def draw_turn(self):
+    print(f"---------------------------- {self.playernums}")
     self.canvas.itemconfigure(self.you_won_text, state='hidden')
     self.canvas.itemconfigure(self.eliminated_text, state='hidden')
     self.canvas.itemconfigure(self.your_turn_text, state='hidden')
