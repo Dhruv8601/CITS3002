@@ -52,7 +52,7 @@ def client_handler(connection, address, idnum):
     if player.idnum != idnum:
       player.connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
   
-  if (len(all_players)) > 0:
+  if (len(all_players)) > 1:
     for key, player in all_players.items():
       player.connection.send(tiles.MessageGameStart().pack())
       player.connection.send(tiles.MessagePlayerTurn(player_turn).pack())
@@ -87,16 +87,22 @@ def client_handler(connection, address, idnum):
         if isinstance(msg, tiles.MessagePlaceTile):
           if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
             # notify client that placement was successful
-            connection.send(msg.pack())
+            for key, player in all_players.items():
+              player.connection.send(msg.pack())
 
             # check for token movement
             positionupdates, eliminated = board.do_player_movement(live_idnums)
 
             for msg in positionupdates:
-              connection.send(msg.pack())
+              for key, player in all_players.items():
+                player.connection.send(msg.pack())
             
-            if idnum in eliminated:
-              connection.send(tiles.MessagePlayerEliminated(idnum).pack())
+            for el_idnum in eliminated:
+              for key, player in all_players.items():
+                player.connection.send(tiles.MessagePlayerEliminated(el_idnum).pack())
+              del all_players[el_idnum]
+              live_idnums = [all_players[player].idnum for player in all_players]
+            if len(live_idnums) < 2:
               return
 
             # pickup a new tile
@@ -119,10 +125,15 @@ def client_handler(connection, address, idnum):
               positionupdates, eliminated = board.do_player_movement(live_idnums)
 
               for msg in positionupdates:
-                connection.send(msg.pack())
+                for key, player in all_players.items():
+                  player.connection.send(msg.pack())
               
-              if idnum in eliminated:
-                connection.send(tiles.MessagePlayerEliminated(idnum).pack())
+              for el_idnum in eliminated:
+                for key, player in all_players.items():
+                  player.connection.send(tiles.MessagePlayerEliminated(el_idnum).pack())
+                del all_players[el_idnum]
+                live_idnums = [all_players[player].idnum for player in all_players]
+              if len(live_idnums) < 2:
                 return
               
               # start next turn
