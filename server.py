@@ -47,7 +47,6 @@ def new_game():
   global board
 
   active_players = {}
-  player_turn = 0
   player_turn_index = 0
   live_idnums = []
   
@@ -60,6 +59,7 @@ def new_game():
   
   live_idnums = [active_players[player].idnum for player in active_players]
 
+  player_turn = live_idnums[player_turn_index]
 
   for key, player in all_players.items():
     player.connection.send(tiles.MessageGameStart().pack())
@@ -68,6 +68,12 @@ def new_game():
     for _ in range(tiles.HAND_SIZE):
       tileid = tiles.get_random_tileid()
       player.connection.send(tiles.MessageAddTileToHand(tileid).pack())
+
+  for key, player in all_players.items():
+    print(key)
+    print(player.idnum)
+    print(player.name)
+    print()
 
 def send_to_all(msg):
   global all_players
@@ -82,6 +88,9 @@ def next_player(eliminated):
   global live_idnums
 
   found = False
+  print(live_idnums)
+  print(player_turn)
+  print(player_turn_index)
   while not found: 
     player_turn_index = (player_turn_index + 1) % len(live_idnums)
     player_turn = live_idnums[player_turn_index]
@@ -90,7 +99,10 @@ def next_player(eliminated):
       found = True
 
   live_idnums = [active_players[player].idnum for player in active_players]
-
+  player_turn_index = live_idnums.index(player_turn)
+  print(live_idnums)
+  print(player_turn)
+  print(player_turn_index)
   send_to_all(tiles.MessagePlayerTurn(player_turn))
 
 
@@ -147,7 +159,8 @@ def client_handler(connection, address, idnum):
 
       # sent by the player to put a tile onto the board (in all turns except
       # their second)
-      if (idnum == player_turn and game_running):
+      if (name == all_players[player_turn].name and game_running):
+        print(f"I am Player {idnum} and the player's turn in {player_turn}")
         if isinstance(msg, tiles.MessagePlaceTile):
           if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
             # notify client that placement was successful
@@ -195,6 +208,7 @@ def client_handler(connection, address, idnum):
                 next_player(eliminated)
       else:
         print(f"It is player {player_turn}'s turn. Please wait for your turn player {idnum}.")
+        print(name)
 
 
 # create a TCP/IP socket
