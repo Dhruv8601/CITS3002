@@ -20,6 +20,7 @@ import sys
 import tiles
 import threading
 import time
+import random
 
 class Player:
   def __init__(self, connection, name, idnum):
@@ -53,27 +54,28 @@ def new_game():
   game_running = True
   
   board = tiles.Board()
-  
-  for key, player in all_players.items():
-    active_players[player.idnum] = player
-  
-  live_idnums = [active_players[player].idnum for player in active_players]
 
+  all_players_list = list(all_players.keys())
+
+  random.shuffle(all_players_list)
+
+  num_players = min(len(all_players), 4)
+
+  for i in range(num_players):
+    add_player = all_players[all_players_list[i]]
+    active_players[add_player.idnum] = add_player
+
+  live_idnums = [active_players[player].idnum for player in active_players]
   player_turn = live_idnums[player_turn_index]
 
   for key, player in all_players.items():
     player.connection.send(tiles.MessageGameStart().pack())
     player.connection.send(tiles.MessagePlayerTurn(player_turn).pack())
 
+  for key, player in active_players.items():
     for _ in range(tiles.HAND_SIZE):
       tileid = tiles.get_random_tileid()
       player.connection.send(tiles.MessageAddTileToHand(tileid).pack())
-
-  for key, player in all_players.items():
-    print(key)
-    print(player.idnum)
-    print(player.name)
-    print()
 
 def send_to_all(msg):
   global all_players
@@ -88,9 +90,7 @@ def next_player(eliminated):
   global live_idnums
 
   found = False
-  print(live_idnums)
-  print(player_turn)
-  print(player_turn_index)
+
   while not found: 
     player_turn_index = (player_turn_index + 1) % len(live_idnums)
     player_turn = live_idnums[player_turn_index]
@@ -100,9 +100,7 @@ def next_player(eliminated):
 
   live_idnums = [active_players[player].idnum for player in active_players]
   player_turn_index = live_idnums.index(player_turn)
-  print(live_idnums)
-  print(player_turn)
-  print(player_turn_index)
+
   send_to_all(tiles.MessagePlayerTurn(player_turn))
 
 
@@ -144,6 +142,7 @@ def client_handler(connection, address, idnum):
     chunk = connection.recv(4096)
     if not chunk:
       print('client {} disconnected'.format(address))
+      del all_players[idnum]
       return
 
     buffer.extend(chunk)
@@ -160,7 +159,6 @@ def client_handler(connection, address, idnum):
       # sent by the player to put a tile onto the board (in all turns except
       # their second)
       if (name == all_players[player_turn].name and game_running):
-        print(f"I am Player {idnum} and the player's turn in {player_turn}")
         if isinstance(msg, tiles.MessagePlaceTile):
           if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
             # notify client that placement was successful
@@ -207,8 +205,7 @@ def client_handler(connection, address, idnum):
               if game_running:
                 next_player(eliminated)
       else:
-        print(f"It is player {player_turn}'s turn. Please wait for your turn player {idnum}.")
-        print(name)
+        print("Please wait for your turn!")
 
 
 # create a TCP/IP socket
