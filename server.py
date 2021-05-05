@@ -42,6 +42,8 @@ new_disconnected = False
 
 board = tiles.Board()
 
+all_messages = []
+
 
 def new_game():
   global all_players
@@ -52,6 +54,9 @@ def new_game():
   global game_running
   global made_first_move
   global board
+
+  print("NEW GAME WILL START IN 10 SECONDS")
+  time.sleep(10)
 
   active_players = {}
   player_turn_index = 0
@@ -75,9 +80,9 @@ def new_game():
   live_idnums = [active_players[player].idnum for player in active_players]
   player_turn = live_idnums[player_turn_index]
 
-  for key, player in all_players.items():
-    player.connection.send(tiles.MessageGameStart().pack())
-    player.connection.send(tiles.MessagePlayerTurn(player_turn).pack())
+
+  send_to_all(tiles.MessageGameStart())
+  send_to_all(tiles.MessagePlayerTurn(player_turn))
 
   for key, player in active_players.items():
     for _ in range(tiles.HAND_SIZE):
@@ -86,7 +91,9 @@ def new_game():
 
 def send_to_all(msg):
   global all_players
+  global all_messages
 
+  all_messages.append(msg)
   for key, player in all_players.items():
     player.connection.send(msg.pack())
   
@@ -140,13 +147,16 @@ def client_handler(connection, address, idnum):
   if (len(all_players)) > 1 and not made_first_move:
     new_game()
 
+  elif made_first_move:
+    for msg in all_messages:
+      connection.send(msg.pack())
+
+
 
   buffer = bytearray()
 
   while True:
     if (len(all_players)) > 1 and (not game_running):
-      print("NEW GAME WILL START IN 5 SECONDS")
-      #time.sleep(5)
       new_game()
 
     if new_disconnected:
