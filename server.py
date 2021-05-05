@@ -35,8 +35,13 @@ player_turn_index = 0
 live_idnums = []
 
 game_running = False
+made_first_move = False
+
+disconnected = []
+new_disconnected = False
 
 board = tiles.Board()
+
 
 def new_game():
   global all_players
@@ -45,6 +50,7 @@ def new_game():
   global player_turn_index
   global live_idnums
   global game_running
+  global made_first_move
   global board
 
   active_players = {}
@@ -52,6 +58,7 @@ def new_game():
   live_idnums = []
   
   game_running = True
+  made_first_move = False
   
   board = tiles.Board()
 
@@ -111,7 +118,10 @@ def client_handler(connection, address, idnum):
   global player_turn_index
   global live_idnums
   global game_running
+  global made_first_move
   global board
+  global disconnected
+  global new_disconnected
 
   host, port = address
   name = '{}:{}'.format(host, port)
@@ -127,7 +137,7 @@ def client_handler(connection, address, idnum):
     if player.idnum != idnum:
       player.connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
 
-  if (len(all_players)) > 1:
+  if (len(all_players)) > 1 and not made_first_move:
     new_game()
 
 
@@ -136,16 +146,35 @@ def client_handler(connection, address, idnum):
   while True:
     if (len(all_players)) > 1 and (not game_running):
       print("NEW GAME WILL START IN 5 SECONDS")
-      time.sleep(5)
+      #time.sleep(5)
       new_game()
 
-    chunk = connection.recv(4096)
-    if not chunk:
-      print('client {} disconnected'.format(address))
-      del all_players[idnum]
-      return
+    if new_disconnected:
+      new_disconnected = False
+      print(list(all_players.keys()), idnum)
 
-    buffer.extend(chunk)
+      for idnum in disconnected:
+        if idnum in all_players:
+
+          del all_players[idnum]
+          del active_players[idnum]
+          send_to_all(tiles.MessagePlayerLeft(idnum))
+          if len(active_players) < 2:
+            game_running = False
+          else:
+            next_player([idnum])
+
+    if idnum not in disconnected:
+      chunk = connection.recv(4096)
+      if not chunk:
+        print('client {} disconnected'.format(address))
+        disconnected.append(idnum)
+        new_disconnected = True
+  
+        
+
+      if chunk:
+        buffer.extend(chunk)
 
     while True:
       msg, consumed = tiles.read_message_from_bytearray(buffer)
@@ -160,6 +189,8 @@ def client_handler(connection, address, idnum):
       # their second)
       if (name == all_players[player_turn].name and game_running):
         if isinstance(msg, tiles.MessagePlaceTile):
+          if not made_first_move:
+            made_first_move = True
           if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
             # notify client that placement was successful
             send_to_all(msg)
