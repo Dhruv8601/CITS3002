@@ -44,6 +44,8 @@ board = tiles.Board()
 
 all_messages = []
 
+num_move = 0
+
 
 def new_game():
   global all_players
@@ -56,7 +58,8 @@ def new_game():
   global board
 
   print("NEW GAME WILL START IN 10 SECONDS")
-  time.sleep(10)
+  send_to_all(tiles.MessageCountdown())
+  time.sleep(5)
 
   active_players = {}
   player_turn_index = 0
@@ -129,6 +132,7 @@ def client_handler(connection, address, idnum):
   global board
   global disconnected
   global new_disconnected
+  global num_move
 
   host, port = address
   name = '{}:{}'.format(host, port)
@@ -138,16 +142,19 @@ def client_handler(connection, address, idnum):
 
 
   connection.send(tiles.MessageWelcome(idnum).pack())
+  
+  all_messages.append(tiles.MessagePlayerJoined(name, idnum))
 
   for key, player in all_players.items():
-    connection.send(tiles.MessagePlayerJoined(player.name, player.idnum).pack())
+    if not made_first_move:
+      connection.send(tiles.MessagePlayerJoined(player.name, player.idnum).pack())
     if player.idnum != idnum:
       player.connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
 
   if (len(all_players)) > 1 and not made_first_move:
     new_game()
 
-  elif made_first_move:
+  if made_first_move:
     for msg in all_messages:
       connection.send(msg.pack())
 
@@ -168,6 +175,7 @@ def client_handler(connection, address, idnum):
 
           del all_players[idnum]
           del active_players[idnum]
+          send_to_all(tiles.MessagePlayerEliminated(idnum))
           send_to_all(tiles.MessagePlayerLeft(idnum))
           if len(active_players) < 2:
             game_running = False
@@ -197,7 +205,11 @@ def client_handler(connection, address, idnum):
 
       # sent by the player to put a tile onto the board (in all turns except
       # their second)
+      # if time.sleep(2):
+      #   if num_move > 2 * len(active_players):
+      #     msg = tiles.MessagePlaceTile 
       if (name == all_players[player_turn].name and game_running):
+        num_move += 1
         if isinstance(msg, tiles.MessagePlaceTile):
           if not made_first_move:
             made_first_move = True
