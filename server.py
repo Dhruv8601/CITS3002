@@ -64,8 +64,6 @@ def new_game():
 
   for key, player in all_players.items():
     player.hadPlayerTurn = False
-    print(player.idnum)
-    all_messages.append(tiles.MessagePlayerJoined(player.name, player.idnum))
 
 
   all_players_list = list(all_players.keys())
@@ -109,7 +107,7 @@ def next_player(eliminated):
       active_players.put(player)
       live_idnums.append(player.idnum)
 
-  print(list(active_players.queue))
+  #print(list(active_players.queue))
 
   if (active_players.qsize() > 1):
     next_p = list(active_players.queue)[0]
@@ -144,16 +142,16 @@ def client_handler(connection, address, idnum):
 
   # notifiy all exisitng players of the new player and notify the new player of all existng players
   for key, player in all_players.items():
-    if not made_first_move:
-      connection.send(tiles.MessagePlayerJoined(player.name, player.idnum).pack())
+    connection.send(tiles.MessagePlayerJoined(player.name, player.idnum).pack())
     if player.idnum != idnum:
       player.connection.send(tiles.MessagePlayerJoined(name, idnum).pack())
   
   if (len(all_players) > 1) and not made_first_move:
+    print("start game")
     send_to_all(tiles.MessageCountdown())
-    if not game_created:
-      game_created = True
-      time.sleep(10)
+    # if not game_created:
+    #   game_created = True
+    #   #time.sleep(10)
     new_game()
 
   # if game has already started then update the new plyayer of the current game state
@@ -166,35 +164,33 @@ def client_handler(connection, address, idnum):
   while True:
     if (len(all_players)) > 1 and (not game_created):
       send_to_all(tiles.MessageCountdown())
-      if not game_created:
-        game_created = True
-        time.sleep(10)
+      # if not game_created:
+      #   game_created = True
+        #time.sleep(10)
       new_game()
 
     chunk = connection.recv(4096)
     if not chunk:
       print('client {} disconnected'.format(address))
       return
-
-    buffer.extend(chunk)
+    if (name == list(active_players.queue)[0].name):
+      buffer.extend(chunk)
 
     while True:
-      msg, consumed = tiles.read_message_from_bytearray(buffer)
-      if not consumed:
-        break
+      if (name == list(active_players.queue)[0].name):
+        msg, consumed = tiles.read_message_from_bytearray(buffer)
+        if not consumed:
+          break
 
-      buffer = buffer[consumed:]
+        buffer = buffer[consumed:]
 
-      print('received message {}'.format(msg))
+      #print('received message {}'.format(msg))
 
       # sent by the player to put a tile onto the board (in all turns except
       # their second)
       if (name == list(active_players.queue)[0].name):
-        print("1-----")
         if isinstance(msg, tiles.MessagePlaceTile):
-          print("2-----")
           if board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
-            print("3-----")
             if not made_first_move:
               made_first_move = True
             # notify client that placement was successful
