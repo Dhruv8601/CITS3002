@@ -58,12 +58,13 @@ def new_game():
   game = Game(tiles.Board(), True)
   live_idnums = []
   messages = []
+  client_order = Queue()
 
   send_to_all(tiles.MessageGameStart())
 
   all_clients_list = clients
   random.shuffle(all_clients_list)
-  num_players = min(len(all_clients_list, 4))
+  num_players = min(len(all_clients_list), 4)
 
   for i in range(num_players):
     client_order.put(all_clients_list[i])
@@ -71,11 +72,16 @@ def new_game():
 
   first_client = list(client_order.queue)[0]
   send_to_all(tiles.MessagePlayerTurn(first_client.idnum))
+  print(first_client.idnum)
+  print([client.idnum for client in list(client_order.queue)])
 
   for client in clients:
     if client == first_client:
       client.had_turn = True
-      client.num_turn += 1
+      client.num_turn = 1
+    else:
+      client.had_turn = False
+      client.num_turn = 0
 
   for client in clients:
     if client.idnum in live_idnums:
@@ -90,6 +96,38 @@ def next_client(eliminated):
   global clients
   global live_idnums
   global client_order 
+
+  print([client.idnum for client in list(client_order.queue)])
+  current_order = client_order
+  current_client = current_order.get()
+  current_order.put(current_client)
+
+
+  new_order = Queue()
+  live_idnums = []
+
+  for client in current_order.queue:
+    if client.idnum not in eliminated:
+      new_order.put(client)
+      live_idnums.append(client.idnum)
+
+  if new_order.qsize() > 1:
+    new_client = list(new_order.queue)[0]
+    send_to_all(tiles.MessagePlayerTurn(new_client.idnum))
+
+    for client in clients:
+      if client == new_client:
+        client.had_turn = True
+        client.num_turn += 1
+
+  else:
+    game.created = False
+
+  client_order = new_order
+
+  
+    
+  
 # remove a client from the server (because they have disconnected)
 # we need to remove them from the global client list, and also remove their
 # connection from our list of connections-to-listen-to
@@ -119,6 +157,9 @@ def send_to_all(msg):
 #   interrupt with Ctrl+C or Ctrl+Pause/Break
 #
 while True:
+  if len(clients) > 1 and not game.made_first_move:
+    print("new game")
+    new_game()
   # wait for any one of our socket/connections to be readable, or to have an
   # exceptional state.
   # get back a list of all the socket/connections that are readable or in an
@@ -152,6 +193,11 @@ while True:
   
   # check if any of our client connections were in the list of currently
   # readable connections (i.e. check if there is a message on any of them).
+    if game.made_first_move:
+      for msg in messages:
+        client.connection.send(msg)
+
+
 
   disconnected = []
 
@@ -179,44 +225,49 @@ while True:
 
       # read as many complete messages as possible out of this client's buffer
       while True:
-        msg, consumed = tiles.read_message_from_bytearray(client.buffer)
-        client.buffer = client.buffer[consumed:]
+        if len(clients) > 1 and not game.created:
+          print("new game")
+          new_game()
+        if client.name == list(client_order.queue)[0].name:
+          msg, consumed = tiles.read_message_from_bytearray(client.buffer)
+          client.buffer = client.buffer[consumed:]
+          if msg: print('received message {}'.format(msg))
 
-        print('received message {}'.format(msg))
-
-        if isinstance(msg, tiles.MessagePlaceTile):
-          if game.board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
-            if not game.made_first_move:
-              game.made_first_move = True
-            
-            send_to_all(msg)
-
-            positionupdates, eliminated = game.board.do_player_movement(live_idnums)
-
-            for msg in positionupdates:
+          if isinstance(msg, tiles.MessagePlaceTile):
+            print(client.idnum, list(client_order.queue)[0].idnum )
+            if game.board.set_tile(msg.x, msg.y, msg.tileid, msg.rotation, msg.idnum):
+              if not game.made_first_move:
+                game.made_first_move = True
+                print("made first move")
+              
               send_to_all(msg)
-
-            for idnum in eliminated:
-              send_to_all(tiles.MessagePlayerEliminated(idnum))
-
-            tileid = tiles.get_random_tileid()
-            client.connection.send(tiles.MessageAddTileToHand(tileid).pack())
-
-            next_player(eliminated)
-        elif isinstance(msg, tiles.MessageMoveToken):
-          if not game.board.have_player_position(msg.idnum):
-            if game.board.set_player_start_position(msg.idnum, msg.x, msg.y, msg.position):
 
               positionupdates, eliminated = game.board.do_player_movement(live_idnums)
 
               for msg in positionupdates:
                 send_to_all(msg)
-            
-              if idnum in eliminated:
+
+              for idnum in eliminated:
                 send_to_all(tiles.MessagePlayerEliminated(idnum))
-            
-              # start next turn
-              next_player(eliminated)
+
+              tileid = tiles.get_random_tileid()
+              client.connection.send(tiles.MessageAddTileToHand(tileid).pack())
+
+              next_client(eliminated)
+          elif isinstance(msg, tiles.MessageMoveToken):
+            if not game.board.have_player_position(msg.idnum):
+              if game.board.set_player_start_position(msg.idnum, msg.x, msg.y, msg.position):
+
+                positionupdates, eliminated = game.board.do_player_movement(live_idnums)
+
+                for msg in positionupdates:
+                  send_to_all(msg)
+              
+                for idnum in eliminated:
+                  send_to_all(tiles.MessagePlayerEliminated(idnum))
+              
+                # start next turn
+                next_client(eliminated)
 
         else:
           break
