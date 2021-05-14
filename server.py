@@ -105,14 +105,17 @@ def send_to_all(msg):
     except Exception as e:
       print('exception sending message: {}'.format(e))
 
-def next_turn(eliminated):
+def next_turn(eliminated, next=True):
   global clients
   global live_idnums
   global client_order
+  print("eliminated", end = " ")
+  print(eliminated)
 
   current_order = client_order
-  current_client = current_order.get()
-  current_order.put(current_client)
+  if next:
+    current_client = current_order.get()
+    current_order.put(current_client)
 
   new_order = Queue()
   live_idnums = []
@@ -122,7 +125,7 @@ def next_turn(eliminated):
       new_order.put(client)
       live_idnums.append(client.idnum)
 
-  print([client.idnum for client in list(new_order.queue)])
+  #print([client.idnum for client in list(new_order.queue)])
   if new_order.qsize() > 1:
     new_client = list(new_order.queue)[0]
     send_to_all(tiles.MessagePlayerTurn(new_client.idnum))
@@ -142,14 +145,26 @@ def next_turn(eliminated):
 #   global clients
 #   listening.remove(client.connection)
 #   clients.remove(client)
+
 def remove_client(client):
   global clients
   print("removing client")
-  if client == list(client_order.queue)[0]:
-    next_turn([client.idnum])
+  print([client.idnum for client in list(client_order.queue)])
   clients.remove(client)
-  send_to_all(tiles.MessagePlayerEliminated(client.idnum))
+  
+  if client in list(client_order.queue):
+    print("was in queue")
+    if client == list(client_order.queue)[0]:
+      next_turn([client.idnum])
+    else:
+      next_turn([client.idnum], next=False)
+
+
+    if client.had_turn:
+      send_to_all(tiles.MessagePlayerEliminated(client.idnum))
+
   send_to_all(tiles.MessagePlayerLeft(client.idnum))
+  print([client.idnum for client in list(client_order.queue)])
 
 def client_handler(connection, address, idnum):
   global clients
@@ -181,10 +196,11 @@ def client_handler(connection, address, idnum):
   buffer = bytearray()
 
   while True:
+    if len(clients) > 1 and not game.created:
+      new_game()
+
     for client in clients:
       if client.name == name:
-        if len(clients) > 1 and not game.created:
-          new_game()
         try:
           chunk = connection.recv(4096)
         except:
@@ -198,9 +214,10 @@ def client_handler(connection, address, idnum):
           print('client {} disconnected second'.format(address))
           for client in clients:
             if client.name == name:
+              print(f"did client have turn: {client.had_turn}")
               remove_client(client)
           continue
-        if name == list(client_order.queue)[0].name:
+        if name == list(client_order.queue)[0].name and game.created:
           buffer.extend(chunk)
 
           while True:
